@@ -1,0 +1,33 @@
+# ENV
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.cache/
+
+# Node
+node_modules/
+dist/
+build/
+
+# ML / Model cache
+*.bin
+*.pt
+*.ckpt
+
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# ML Models
+backend/model/
+*.safetensors
