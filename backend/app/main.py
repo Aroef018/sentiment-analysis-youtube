@@ -47,15 +47,23 @@ class SizeLimitMiddleware(BaseHTTPMiddleware):
 # Add size limit middleware BEFORE CORS
 app.add_middleware(SizeLimitMiddleware)
 
-# CORS configuration - be specific about origins, methods, and headers
+# CORS configuration - dynamically set origins
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# Add production frontend URL from env if set
+import os
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],  # Restrict to needed methods only
     allow_headers=["Content-Type", "Authorization"],  # Restrict to needed headers only
