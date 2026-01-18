@@ -11,15 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 def normalize_asyncpg_url(raw_url: str) -> str:
-    """Remove psycopg-style params (sslmode/channel_binding) and set ssl=true for asyncpg."""
+    """Remove psycopg-style params (sslmode/channel_binding) and set ssl=require for asyncpg."""
     try:
         url_obj = make_url(raw_url)
         if url_obj.drivername.endswith("asyncpg"):
             q = dict(url_obj.query)
-            q.pop("sslmode", None)
+            # Remove psycopg-specific params
             q.pop("channel_binding", None)
-            if "ssl" not in q:
-                q["ssl"] = "true"
+            # Convert sslmode to ssl with proper value
+            if "sslmode" in q:
+                q["ssl"] = q.pop("sslmode")  # asyncpg uses 'ssl' not 'sslmode'
+            elif "ssl" not in q:
+                q["ssl"] = "require"  # Default to require for Neon
             url_obj = url_obj.set(query=q)
         cleaned = str(url_obj)
         logger.info(f"Using DATABASE_URL: {cleaned}")
