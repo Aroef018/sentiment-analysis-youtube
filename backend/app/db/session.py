@@ -5,6 +5,12 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.core.config import settings
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Debug log to confirm DATABASE_URL at runtime (helps diagnose SSL params)
+logger.info(f"Using DATABASE_URL: {settings.DATABASE_URL}")
 
 engine = create_async_engine(
     settings.DATABASE_URL,
