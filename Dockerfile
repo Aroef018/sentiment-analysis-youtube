@@ -35,9 +35,7 @@ COPY --from=builder /root/.local /root/.local
 # Copy application (exclude model folder - will load from HF hub at runtime)
 COPY backend/ ./
 RUN rm -rf /app/model /app/archive /app/__pycache__ && \
-    find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
-    find /root/.local -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
-    find /root/.local -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
+    find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
 # Set PATH and model cache location
 ENV PATH=/root/.local/bin:$PATH \
