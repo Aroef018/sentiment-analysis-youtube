@@ -31,6 +31,18 @@ const Register: React.FC = () => {
       setError("Password minimal 8 karakter");
       return;
     }
+    if (!/[A-Z]/.test(formData.password)) {
+      setError("Password harus mengandung minimal 1 huruf besar");
+      return;
+    }
+    if (!/[a-z]/.test(formData.password)) {
+      setError("Password harus mengandung minimal 1 huruf kecil");
+      return;
+    }
+    if (!/\d/.test(formData.password)) {
+      setError("Password harus mengandung minimal 1 angka");
+      return;
+    }
     if (formData.password !== formData.confirmPassword) {
       setError("Password tidak cocok!");
       return;

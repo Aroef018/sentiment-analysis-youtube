@@ -73,8 +73,8 @@ class RegisterRequest(BaseModel):
             v = v.strip()
             if len(v) < 2:
                 raise ValueError("Full name must be at least 2 characters long")
-            # Only allow alphanumeric, spaces, and common punctuation
-            if not re.match(r"^[a-zA-Z0-9\s\-\.\']$", v):
+            # Allow alphanumeric, spaces, hyphens, periods, apostrophes
+            if not re.match(r"^[a-zA-Z0-9\s\-.']+$", v):
                 raise ValueError("Full name contains invalid characters")
         return v
 
