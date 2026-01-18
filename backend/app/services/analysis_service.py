@@ -112,26 +112,35 @@ class AnalysisService:
         )
         comment_models = []
 
-        for raw in raw_comments:
-            clean_text = preprocessing_service.clean_text(raw["text"])
-            result = sentiment_service.analyze(clean_text)
-            sentiment = result["sentiment"]
+        try:
+            for idx, raw in enumerate(raw_comments):
+                try:
+                    clean_text = preprocessing_service.clean_text(raw["text"])
+                    result = sentiment_service.analyze(clean_text)
+                    sentiment = result["sentiment"]
 
-            comment_models.append(
-                Comment(
-                    id=raw["comment_id"],
-                    video_id=video.id,
-                    analysis_id=analysis.id,
-                    author=raw["author"],
-                    text=raw["text"],
-                    sentiment=sentiment,
-                    parent_id=raw.get("parent_id"),
-                    is_top_level=raw["is_top_level"],
-                    like_count=raw["like_count"],
-                    published_at=raw["published_at"],
-                    created_at=datetime.utcnow(),
-                )
-            )
+                    comment_models.append(
+                        Comment(
+                            id=raw["comment_id"],
+                            video_id=video.id,
+                            analysis_id=analysis.id,
+                            author=raw["author"],
+                            text=raw["text"],
+                            sentiment=sentiment,
+                            parent_id=raw.get("parent_id"),
+                            is_top_level=raw["is_top_level"],
+                            like_count=raw["like_count"],
+                            published_at=raw["published_at"],
+                            created_at=datetime.utcnow(),
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Error analyzing comment {idx}: {str(e)}")
+                    # Skip this comment and continue
+                    continue
+        except Exception as e:
+            logger.error(f"Sentiment analysis failed: {str(e)}")
+            raise Exception("Sentiment analysis gagal. Coba lagi nanti.")
 
         # ======================
         # 6️⃣ Save Comments
