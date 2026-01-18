@@ -14,7 +14,10 @@ COPY backend/requirements.txt .
 
 # Install Python packages to user site-packages (smaller than system)
 RUN pip install --user --no-cache-dir --no-warn-script-location \
-    -r requirements.txt
+    -r requirements.txt && \
+    find /root/.local -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
+    find /root/.local -type f -name "*.pyc" -delete && \
+    find /root/.local -type f -name "*.pyo" -delete
 
 # Runtime stage
 FROM python:3.12-slim
@@ -31,7 +34,10 @@ COPY --from=builder /root/.local /root/.local
 
 # Copy application (exclude model folder - will load from HF hub at runtime)
 COPY backend/ ./
-RUN rm -rf /app/model
+RUN rm -rf /app/model /app/archive /app/__pycache__ && \
+    find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true && \
+    find /root/.local -type d -name "tests" -exec rm -rf {} + 2>/dev/null || true && \
+    find /root/.local -type d -name "*.dist-info" -exec rm -rf {} + 2>/dev/null || true
 
 # Set PATH and model cache location
 ENV PATH=/root/.local/bin:$PATH \

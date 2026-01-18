@@ -17,8 +17,9 @@ google-auth==2.45.0
 google-api-python-client==2.187.0
 bleach==6.1.0
 
-# ML/NLP (minimal)
-torch==2.9.1
+# ML/NLP (minimal) - CPU only for smaller image
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1+cpu
 transformers==4.57.3
 
 # HTTP & Utilities
