@@ -51,8 +51,23 @@ const Register: React.FC = () => {
     setLoading(true);
     try {
       // Backend menerima full_name, gunakan username sebagai full_name
-      await registerApi(formData.email, formData.username, formData.password);
-      navigate("/login");
+      const response = await registerApi(
+        formData.email,
+        formData.username,
+        formData.password,
+      );
+
+      // Simpan token ke localStorage
+      if (response.data.access_token) {
+        localStorage.setItem("access_token", response.data.access_token);
+        localStorage.setItem(
+          "token_type",
+          response.data.token_type || "bearer",
+        );
+      }
+
+      // Redirect ke dashboard
+      navigate("/");
     } catch (err: any) {
       const msg = err?.response?.data?.detail || "Registrasi gagal";
       setError(msg);

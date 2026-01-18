@@ -53,7 +53,15 @@ async def register(
 
         await UserRepository.create(db, user)
         logger.info(f"User registered successfully: {payload.email}")
-        return {"message": "User registered successfully"}
+        
+        # Create access token for auto-login
+        token = create_access_token({
+            "sub": str(user.id),
+            "email": user.email,
+            "provider": user.provider,
+        })
+        
+        return {"access_token": token, "token_type": "bearer", "message": "User registered successfully"}
     except HTTPException:
         raise
     except SQLAlchemyError as e:
