@@ -29,13 +29,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy Python packages from builder
 COPY --from=builder /root/.local /root/.local
 
-# Copy application
+# Copy application (exclude model folder - will load from HF hub at runtime)
 COPY backend/ ./
+RUN rm -rf /app/model
 
-# Set PATH
+# Set PATH and model cache location
 ENV PATH=/root/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    TRANSFORMERS_CACHE=/tmp/hf_cache \
+    HF_HOME=/tmp/hf_cache
 
 # Expose port
 EXPOSE 8000
