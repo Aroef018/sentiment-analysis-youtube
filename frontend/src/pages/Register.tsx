@@ -18,10 +18,24 @@ const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (!formData.email) {
+      setError("Email diperlukan");
+      return;
+    }
+    if (!formData.username) {
+      setError("Username diperlukan");
+      return;
+    }
+    if (formData.password.length < 8) {
+      setError("Password minimal 8 karakter");
+      return;
+    }
     if (formData.password !== formData.confirmPassword) {
       setError("Password tidak cocok!");
       return;
     }
+
     setLoading(true);
     try {
       // Backend menerima full_name, gunakan username sebagai full_name
