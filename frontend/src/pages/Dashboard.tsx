@@ -38,7 +38,29 @@ type AnalysisResult = {
   };
   insight: string;
   analysisId?: string;
+  videoId?: string;
   savedAt?: string;
+};
+
+type CommentItem = {
+  id: string;
+  author: string;
+  text: string;
+  sentiment: "positive" | "neutral" | "negative";
+  like_count: number;
+  published_at?: string | null;
+  is_top_level: boolean;
+};
+
+type CommentsResponse = {
+  items: CommentItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
+  filter: string;
 };
 
 const Dashboard: React.FC = () => {
@@ -47,6 +69,14 @@ const Dashboard: React.FC = () => {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string>("");
   const navigate = useNavigate();
+
+  // Comments state
+  const [showComments, setShowComments] = useState<boolean>(false);
+  const [comments, setComments] = useState<CommentsResponse | null>(null);
+  const [commentsLoading, setCommentsLoading] = useState<boolean>(false);
+  const [sentimentFilter, setSentimentFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
 
   // Check authentication on mount
   useEffect(() => {
@@ -102,8 +132,8 @@ const Dashboard: React.FC = () => {
         likesNum !== undefined
           ? likesNum.toLocaleString("id-ID")
           : typeof likesRaw === "string"
-          ? likesRaw
-          : "-";
+            ? likesRaw
+            : "-";
 
       const mapped = {
         videoInfo: {
@@ -126,11 +156,16 @@ const Dashboard: React.FC = () => {
           ],
         },
         insight: `Hasil analisis: Positif ${pct(pos)}%, Netral ${pct(
-          neu
+          neu,
         )}%, Negatif ${pct(neg)}% dari ${total} komentar.`,
         analysisId: data.analysis_id,
+        videoId: data.video?.id,
         savedAt: new Date().toISOString(),
       };
+      console.log("Analysis result:", {
+        analysisId: data.analysis_id,
+        videoId: data.video?.id,
+      });
       setResult(mapped);
       try {
         localStorage.setItem("last_analysis_result", JSON.stringify(mapped));
@@ -161,6 +196,54 @@ const Dashboard: React.FC = () => {
     localStorage.removeItem("last_analysis_result");
     localStorage.removeItem("last_analysis_url");
     navigate("/login");
+  };
+
+  const fetchComments = async (page: number = 1, sentiment: string = "all") => {
+    const videoId = result?.videoId;
+    console.log("Fetching comments with videoId:", videoId);
+    if (!videoId) {
+      console.error("No videoId available!");
+      setCommentsError("Video ID tidak ditemukan. Coba analisis ulang.");
+      return;
+    }
+
+    setCommentsLoading(true);
+    setCommentsError(null);
+    try {
+      const params: Record<string, number | string> = { page, limit: 20 };
+      if (sentiment !== "all") {
+        params.sentiment = sentiment;
+      }
+      console.log(
+        "Fetching comments from:",
+        `/analysis/comments/${videoId}`,
+        params,
+      );
+      const res = await api.get(`/analysis/comments/${videoId}`, { params });
+      console.log("Comments response:", res.data);
+      setComments(res.data);
+      setCurrentPage(page);
+      setSentimentFilter(sentiment);
+    } catch (err) {
+      const error = err as {
+        response?: { data?: { detail?: string } };
+        message?: string;
+      };
+      console.error("Error fetching comments:", error);
+      setCommentsError(
+        error?.response?.data?.detail ||
+          error?.message ||
+          "Gagal memuat komentar",
+      );
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  const truncateText = (text: string, maxLength: number = 200) => {
+    return text.length > maxLength
+      ? text.substring(0, maxLength) + "..."
+      : text;
   };
 
   return (
@@ -360,7 +443,7 @@ const Dashboard: React.FC = () => {
                           stat.bg
                         } p-5 rounded-lg text-center border ${stat.bg.replace(
                           "50",
-                          "100"
+                          "100",
                         )}`}
                       >
                         <p className={`text-2xl font-bold ${stat.color} mb-1`}>
@@ -395,7 +478,7 @@ const Dashboard: React.FC = () => {
                           {result.sentiment.percentages.map(
                             (entry: PercentEntry, index: number) => (
                               <Cell key={`cell-${index}`} fill={entry.color} />
-                            )
+                            ),
                           )}
                         </Pie>
                         <Tooltip formatter={(val) => `${val}%`} />
@@ -404,6 +487,182 @@ const Dashboard: React.FC = () => {
                     </ResponsiveContainer>
                   </div>
                 </div>
+              </div>
+
+              {/* Comments Section */}
+              <div className="mt-8">
+                {!result.videoId ? (
+                  <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-center">
+                    <p className="text-yellow-800 text-sm">
+                      ⚠️ Komentar tidak tersedia untuk analisis lama. Silakan
+                      lakukan analisis ulang untuk melihat komentar.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        if (!showComments) {
+                          fetchComments(1, "all");
+                        }
+                        setShowComments(!showComments);
+                      }}
+                      className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                    >
+                      <MessageCircle size={20} />
+                      {showComments ? "Tutup Komentar" : "Lihat Semua Komentar"}
+                    </button>
+
+                    {showComments && (
+                      <div className="mt-6 bg-white p-4 md:p-6 rounded-lg border border-gray-200">
+                        <div className="mb-4 flex flex-wrap gap-2">
+                          <button
+                            onClick={() => fetchComments(1, "all")}
+                            className={
+                              sentimentFilter === "all"
+                                ? "bg-gray-800 text-white px-4 py-2 rounded font-semibold text-sm"
+                                : "bg-gray-100 px-4 py-2 rounded hover:bg-gray-200 text-sm"
+                            }
+                          >
+                            Semua
+                          </button>
+                          <button
+                            onClick={() => fetchComments(1, "positive")}
+                            className={
+                              sentimentFilter === "positive"
+                                ? "bg-green-600 text-white px-4 py-2 rounded font-semibold text-sm"
+                                : "bg-gray-100 px-4 py-2 rounded hover:bg-gray-200 text-sm"
+                            }
+                          >
+                            🟢 Positif
+                          </button>
+                          <button
+                            onClick={() => fetchComments(1, "neutral")}
+                            className={
+                              sentimentFilter === "neutral"
+                                ? "bg-yellow-600 text-white px-4 py-2 rounded font-semibold text-sm"
+                                : "bg-gray-100 px-4 py-2 rounded hover:bg-gray-200 text-sm"
+                            }
+                          >
+                            🟡 Netral
+                          </button>
+                          <button
+                            onClick={() => fetchComments(1, "negative")}
+                            className={
+                              sentimentFilter === "negative"
+                                ? "bg-red-600 text-white px-4 py-2 rounded font-semibold text-sm"
+                                : "bg-gray-100 px-4 py-2 rounded hover:bg-gray-200 text-sm"
+                            }
+                          >
+                            🔴 Negatif
+                          </button>
+                        </div>
+
+                        {commentsLoading ? (
+                          <div className="text-center text-gray-500 py-8">
+                            Memuat komentar...
+                          </div>
+                        ) : commentsError ? (
+                          <div className="text-center py-8">
+                            <p className="text-red-600 font-semibold mb-2">
+                              ❌ Error
+                            </p>
+                            <p className="text-sm text-red-500">
+                              {commentsError}
+                            </p>
+                          </div>
+                        ) : comments?.items?.length ? (
+                          <div>
+                            <div className="space-y-3 mb-4">
+                              {comments.items.map((c) => (
+                                <div
+                                  key={c.id}
+                                  className="bg-gray-50 p-4 rounded-lg border border-gray-200"
+                                >
+                                  <div className="flex items-start gap-2 mb-2 justify-between">
+                                    <span className="font-semibold text-sm text-gray-900">
+                                      @{c.author}
+                                    </span>
+                                    <span
+                                      className={`text-xs px-2 py-1 rounded font-medium ${
+                                        c.sentiment === "positive"
+                                          ? "bg-green-100 text-green-800"
+                                          : c.sentiment === "neutral"
+                                            ? "bg-yellow-100 text-yellow-800"
+                                            : "bg-red-100 text-red-800"
+                                      }`}
+                                    >
+                                      {c.sentiment === "positive"
+                                        ? "Positif"
+                                        : c.sentiment === "neutral"
+                                          ? "Netral"
+                                          : "Negatif"}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-700 mb-2">
+                                    {truncateText(c.text, 200)}
+                                  </p>
+                                  <div className="text-xs text-gray-500 flex gap-4">
+                                    <span className="flex items-center gap-1">
+                                      <ThumbsUp size={12} /> {c.like_count}
+                                    </span>
+                                    {c.published_at && (
+                                      <span>
+                                        {new Date(
+                                          c.published_at,
+                                        ).toLocaleDateString("id-ID")}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {comments.pagination.total_pages > 1 && (
+                              <div className="flex items-center justify-center gap-3 pt-4 border-t">
+                                <button
+                                  onClick={() =>
+                                    fetchComments(
+                                      currentPage - 1,
+                                      sentimentFilter,
+                                    )
+                                  }
+                                  disabled={currentPage === 1}
+                                  className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                                >
+                                  ← Prev
+                                </button>
+                                <span className="text-sm font-semibold text-gray-700">
+                                  Halaman {currentPage}/
+                                  {comments.pagination.total_pages}
+                                </span>
+                                <button
+                                  onClick={() =>
+                                    fetchComments(
+                                      currentPage + 1,
+                                      sentimentFilter,
+                                    )
+                                  }
+                                  disabled={
+                                    currentPage ===
+                                    comments.pagination.total_pages
+                                  }
+                                  className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                                >
+                                  Next →
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center text-gray-500 py-8">
+                            Tidak ada komentar
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </>
           )}
