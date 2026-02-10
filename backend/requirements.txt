@@ -27,6 +27,7 @@ numpy==1.26.4
 
 # HTTP & Utilities
 requests==2.32.5
+gdown==5.2.0
 
 # Rate limiting
 slowapi==0.1.9

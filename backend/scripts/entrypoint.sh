@@ -5,6 +5,7 @@ MODEL_DIR="${MODEL_DIR:-/app/models}"
 ONNX_PATH="${ONNX_MODEL_PATH:-$MODEL_DIR/model.onnx}"
 ONNX_DATA_PATH="${ONNX_MODEL_DATA_PATH:-$MODEL_DIR/model.onnx.data}"
 ARCHIVE_URL="${MODEL_ARCHIVE_URL:-}"
+ARCHIVE_GDRIVE_ID="${MODEL_ARCHIVE_GDRIVE_ID:-}"
 ONNX_URL="${ONNX_MODEL_URL:-}"
 ONNX_DATA_URL="${ONNX_MODEL_DATA_URL:-}"
 
@@ -21,7 +22,18 @@ fi
 if [ "$need_download" = "true" ]; then
   if [ -n "$ARCHIVE_URL" ]; then
     echo "Downloading model archive from $ARCHIVE_URL"
-    curl -fsSL "$ARCHIVE_URL" -o /tmp/model.tar.gz
+    if echo "$ARCHIVE_URL" | grep -q "drive.google.com"; then
+      python -m gdown --fuzzy "$ARCHIVE_URL" -O /tmp/model.tar.gz
+    else
+      curl -fsSL "$ARCHIVE_URL" -o /tmp/model.tar.gz
+    fi
+    tar -tzf /tmp/model.tar.gz >/dev/null 2>&1
+    tar -xzf /tmp/model.tar.gz -C "$MODEL_DIR"
+    rm -f /tmp/model.tar.gz
+  elif [ -n "$ARCHIVE_GDRIVE_ID" ]; then
+    echo "Downloading model archive from Google Drive id $ARCHIVE_GDRIVE_ID"
+    python -m gdown "$ARCHIVE_GDRIVE_ID" -O /tmp/model.tar.gz
+    tar -tzf /tmp/model.tar.gz >/dev/null 2>&1
     tar -xzf /tmp/model.tar.gz -C "$MODEL_DIR"
     rm -f /tmp/model.tar.gz
   elif [ -n "$ONNX_URL" ] && [ -n "$ONNX_DATA_URL" ]; then
