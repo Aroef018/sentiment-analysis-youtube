@@ -27,6 +27,8 @@ WORKDIR /app
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
+    curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder
@@ -36,6 +38,10 @@ COPY --from=builder /root/.local /root/.local
 COPY backend/ ./
 RUN rm -rf /app/model /app/archive /app/__pycache__ && \
     find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+# Startup script to download ONNX model if needed
+COPY backend/scripts/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Set PATH and model cache location
 ENV PATH=/root/.local/bin:$PATH \
@@ -52,4 +58,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=5)" || exit 1
 
 # Run aplikasi
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
