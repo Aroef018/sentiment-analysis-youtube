@@ -309,8 +309,17 @@ const Dashboard: React.FC = () => {
                     className={`w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${
                       loading ? "opacity-70" : ""
                     }`}
+                    aria-busy={loading}
                   >
-                    {loading ? "Menganalisis..." : "Analisis"}
+                    <span className="inline-flex items-center justify-center gap-2">
+                      {loading && (
+                        <span
+                          className="h-4 w-4 rounded-full border-2 border-white/60 border-t-white animate-spin"
+                          aria-hidden="true"
+                        />
+                      )}
+                      <span>{loading ? "Menganalisis..." : "Analisis"}</span>
+                    </span>
                   </button>
                 </form>
                 {error && (
