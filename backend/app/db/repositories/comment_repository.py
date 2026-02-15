@@ -49,18 +49,20 @@ class CommentRepository:
         Get paginated comments for an analysis with optional sentiment filter.
         Returns (comments, total_count)
         """
-        stmt = select(Comment).where(Comment.analysis_id == analysis_id)
-        
-        if sentiment_filter and sentiment_filter.lower() in ["positive", "neutral", "negative"]:
-            stmt = stmt.where(Comment.sentiment == sentiment_filter.lower())
-        
-        # Get total count
-        count_stmt = select(Comment).where(Comment.analysis_id == analysis_id)
-        if sentiment_filter and sentiment_filter.lower() in ["positive", "neutral", "negative"]:
-            count_stmt = count_stmt.where(Comment.sentiment == sentiment_filter.lower())
-        
         from sqlalchemy import func
-        total_result = await db.execute(select(func.count()).select_from(Comment).where(Comment.analysis_id == analysis_id) if not sentiment_filter else select(func.count()).select_from(Comment).where(Comment.analysis_id == analysis_id).where(Comment.sentiment == sentiment_filter.lower()))
+        
+        # Build base query with analysis_id filter
+        stmt = select(Comment).where(Comment.analysis_id == analysis_id)
+        count_stmt = select(func.count()).select_from(Comment).where(Comment.analysis_id == analysis_id)
+        
+        # Apply sentiment filter if provided
+        if sentiment_filter and sentiment_filter.lower() in ["positive", "neutral", "negative"]:
+            sentiment_value = sentiment_filter.lower()
+            stmt = stmt.where(Comment.sentiment == sentiment_value)
+            count_stmt = count_stmt.where(Comment.sentiment == sentiment_value)
+        
+        # Get total count with filter applied
+        total_result = await db.execute(count_stmt)
         total_count = total_result.scalar() or 0
         
         # Get paginated results
