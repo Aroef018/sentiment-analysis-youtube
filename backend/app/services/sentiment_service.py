@@ -219,7 +219,7 @@ class OnnxSentimentService:
         except Exception:
             pass
 
-        self.id2label = getattr(self.config, "id2label", None)
+        self.id2label = self._normalize_id2label(getattr(self.config, "id2label", None))
 
         self.session = ort.InferenceSession(
             str(onnx_path),
@@ -227,6 +227,25 @@ class OnnxSentimentService:
         )
 
         self.input_names = {i.name for i in self.session.get_inputs()}
+
+    def _normalize_id2label(self, id2label):
+        if isinstance(id2label, dict):
+            label0 = str(id2label.get(0) or id2label.get("0") or "").lower()
+            label1 = str(id2label.get(1) or id2label.get("1") or "neutral").lower()
+            label2 = str(id2label.get(2) or id2label.get("2") or "").lower()
+            if label0 == "positive" and label2 == "negative":
+                return {0: "negative", 1: label1 or "neutral", 2: "positive"}
+            return id2label
+
+        if isinstance(id2label, list) and len(id2label) >= 3:
+            label0 = str(id2label[0]).lower()
+            label1 = str(id2label[1]).lower()
+            label2 = str(id2label[2]).lower()
+            if label0 == "positive" and label2 == "negative":
+                return ["negative", label1 or "neutral", "positive"]
+            return id2label
+
+        return id2label
 
     def _normalize_label(self, label: str) -> str:
         raw = label
