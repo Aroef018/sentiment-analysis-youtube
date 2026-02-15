@@ -30,4 +30,6 @@ logs/
 
 # ML Models
 backend/model/
+backend/models/
+backend/models/*.tar.gz
 *.safetensors

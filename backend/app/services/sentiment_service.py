@@ -1,7 +1,11 @@
 from typing import List, Dict, Optional
 from pathlib import Path
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
+
+import numpy as np
+import onnxruntime as ort
+from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification, AutoConfig
 import torch
+
 from app.core.config import settings
 
 
@@ -33,82 +37,79 @@ class SentimentService:
 
         self.device = 0 if device == "cuda" else -1
         self.batch_size = batch_size
+        self.max_length = 512
 
-        # Check apakah model_name adalah local path atau HuggingFace repo
-        model_path = Path(model_name)
-        
-        if model_path.exists() and model_path.is_dir():
-            # Load dari local directory
-            self.classifier = pipeline(
-                task="sentiment-analysis",
-                model=model_name,
-                tokenizer=model_name,
-                device=self.device,
-            )
-        else:
-            # Assume HuggingFace repo format
-            self.classifier = pipeline(
-                task="sentiment-analysis",
-                model=model_name,
-                tokenizer=model_name,
-                device=self.device,
-            )
+        self.classifier = pipeline(
+            task="sentiment-analysis",
+            model=model_name,
+            tokenizer=model_name,
+            device=self.device,
+        )
+
+        try:
+            tokenizer = getattr(self.classifier, "tokenizer", None)
+            if tokenizer is not None:
+                max_len = getattr(tokenizer, "model_max_length", None)
+                if isinstance(max_len, int) and 1 < max_len < 100000:
+                    self.max_length = max_len
+        except Exception:
+            pass
 
     # =========================
     # INTERNAL UTIL
     # =========================
+    def _apply_swap(self, label: str) -> str:
+        if label == "positive":
+            return "negative" if settings.SENTIMENT_SWAP_POS_NEG else "positive"
+        if label == "negative":
+            return "positive" if settings.SENTIMENT_SWAP_POS_NEG else "negative"
+        return label
+
+    def _map_from_id2label(self, idx: int) -> Optional[str]:
+        id2label = getattr(getattr(self.classifier, "model", None), "config", None)
+        id2label = getattr(id2label, "id2label", None)
+
+        if isinstance(id2label, dict):
+            if str(idx) in id2label:
+                return str(id2label[str(idx)]).lower()
+            if idx in id2label:
+                return str(id2label[idx]).lower()
+        elif isinstance(id2label, list) and 0 <= idx < len(id2label):
+            return str(id2label[idx]).lower()
+
+        return None
+
     def _normalize_label(self, label: str) -> str:
         """
         Normalisasi label agar konsisten
         - Menangani variasi seperti POSITIVE/NEGATIVE/NEUTRAL
         - Menangani format LABEL_0/1/2 dengan membaca config id2label
         """
-        raw = label
         label = label.lower()
 
-        # Direct mapping for common strings
-        if label in ["positive", "positif"]:
-            out = "positive"
-            return (
-                "negative" if settings.SENTIMENT_SWAP_POS_NEG else out
-            )
-        if label in ["negative", "negatif"]:
-            out = "negative"
-            return (
-                "positive" if settings.SENTIMENT_SWAP_POS_NEG else out
-            )
-        if label in ["neutral", "netral"]:
-            return "neutral"
+        direct_map = {
+            "positive": "positive",
+            "positif": "positive",
+            "negative": "negative",
+            "negatif": "negative",
+            "neutral": "neutral",
+            "netral": "neutral",
+        }
 
-        # Handle LABEL_X formats coming from some pipelines
-        try:
-            if label.startswith("label_"):
+        if label in direct_map:
+            return self._apply_swap(direct_map[label])
+
+        if label.startswith("label_"):
+            try:
                 idx = int(label.split("_")[-1])
-                id2label = getattr(getattr(self.classifier, "model", None), "config", None)
-                id2label = getattr(id2label, "id2label", None)
-                mapped = None
-                if isinstance(id2label, dict) and str(idx) in id2label:
-                    mapped = str(id2label[str(idx)]).lower()
-                # Fallback: some models expose id2label as list
-                elif isinstance(id2label, list) and 0 <= idx < len(id2label):
-                    mapped = str(id2label[idx]).lower()
+                mapped = self._map_from_id2label(idx)
+                if mapped and mapped in direct_map:
+                    return self._apply_swap(direct_map[mapped])
                 if mapped:
-                    if mapped in ["positive", "positif"]:
-                        return (
-                            "negative" if settings.SENTIMENT_SWAP_POS_NEG else "positive"
-                        )
-                    if mapped in ["negative", "negatif"]:
-                        return (
-                            "positive" if settings.SENTIMENT_SWAP_POS_NEG else "negative"
-                        )
-                    if mapped in ["neutral", "netral"]:
-                        return "neutral"
                     return mapped
-        except Exception:
-            # ignore mapping errors; return original lowercase
-            pass
+            except Exception:
+                pass
 
-        # Unknown label: return the lowercase raw to aid debugging
         return label
 
     # =========================
@@ -168,6 +169,7 @@ class SentimentService:
             safe_texts,
             batch_size=self.batch_size,
             truncation=True,
+            max_length=self.max_length,
         )
 
         return [
@@ -177,3 +179,133 @@ class SentimentService:
             }
             for r in results
         ]
+
+
+class OnnxSentimentService:
+    """
+    Service untuk melakukan analisis sentimen menggunakan ONNX Runtime.
+    """
+
+    def __init__(
+        self,
+        model_name_or_path: str,
+        onnx_model_path: Optional[str] = None,
+        batch_size: int = 16,
+    ):
+        self.batch_size = batch_size
+        self.max_length = 512
+
+        model_dir = Path(model_name_or_path)
+        if onnx_model_path:
+            onnx_path = Path(onnx_model_path)
+        else:
+            onnx_path = model_dir / "model.onnx"
+
+        if not onnx_path.exists():
+            raise FileNotFoundError(f"ONNX model not found: {onnx_path}")
+
+        # Tokenizer from local dir or HF repo
+        if model_dir.exists() and model_dir.is_dir():
+            self.tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+            self.config = AutoConfig.from_pretrained(str(model_dir))
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+            self.config = AutoConfig.from_pretrained(model_name_or_path)
+
+        try:
+            max_len = getattr(self.tokenizer, "model_max_length", None)
+            if isinstance(max_len, int) and 1 < max_len < 100000:
+                self.max_length = max_len
+        except Exception:
+            pass
+
+        self.id2label = getattr(self.config, "id2label", None)
+
+        self.session = ort.InferenceSession(
+            str(onnx_path),
+            providers=["CPUExecutionProvider"],
+        )
+
+        self.input_names = {i.name for i in self.session.get_inputs()}
+
+    def _normalize_label(self, label: str) -> str:
+        raw = label
+        label = label.lower()
+
+        if label in ["positive", "positif"]:
+            out = "positive"
+            return "negative" if settings.SENTIMENT_SWAP_POS_NEG else out
+        if label in ["negative", "negatif"]:
+            out = "negative"
+            return "positive" if settings.SENTIMENT_SWAP_POS_NEG else out
+        if label in ["neutral", "netral"]:
+            return "neutral"
+
+        return label if label else raw
+
+    def _map_label(self, idx: int) -> str:
+        mapped = None
+        if isinstance(self.id2label, dict):
+            mapped = self.id2label.get(idx) or self.id2label.get(str(idx))
+        elif isinstance(self.id2label, list) and 0 <= idx < len(self.id2label):
+            mapped = self.id2label[idx]
+
+        if mapped:
+            return self._normalize_label(str(mapped))
+        return str(idx)
+
+    def _softmax(self, logits: np.ndarray) -> np.ndarray:
+        logits = logits - np.max(logits, axis=-1, keepdims=True)
+        exp = np.exp(logits)
+        return exp / np.sum(exp, axis=-1, keepdims=True)
+
+    def analyze(self, text: str) -> Dict:
+        if not text or not text.strip():
+            return {
+                "sentiment": "neutral",
+                "confidence": 0.0,
+            }
+
+        result = self.analyze_batch([text])[0]
+        return result
+
+    def analyze_batch(self, texts: List[str]) -> List[Dict]:
+        if not texts:
+            return []
+
+        safe_texts = [text if text and text.strip() else " " for text in texts]
+
+        tokens = self.tokenizer(
+            safe_texts,
+            padding=True,
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="np",
+        )
+
+        inputs = {}
+        if "input_ids" in self.input_names:
+            inputs["input_ids"] = tokens["input_ids"]
+        if "attention_mask" in self.input_names and "attention_mask" in tokens:
+            inputs["attention_mask"] = tokens["attention_mask"]
+        if "token_type_ids" in self.input_names and "token_type_ids" in tokens:
+            inputs["token_type_ids"] = tokens["token_type_ids"]
+
+        outputs = self.session.run(None, inputs)
+        logits = outputs[0]
+
+        probs = self._softmax(logits)
+        labels_idx = np.argmax(probs, axis=-1)
+        scores = np.max(probs, axis=-1)
+
+        results = []
+        for idx, score in zip(labels_idx, scores):
+            label = self._map_label(int(idx))
+            results.append(
+                {
+                    "sentiment": self._normalize_label(label),
+                    "confidence": float(score),
+                }
+            )
+
+        return results

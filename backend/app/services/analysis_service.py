@@ -5,7 +5,7 @@ import logging
 
 from app.services.youtube_video_service import YouTubeVideoService
 from app.services.preprocessing_service import PreprocessingService
-from app.services.sentiment_service import SentimentService
+from app.services.sentiment_service import SentimentService, OnnxSentimentService
 from app.core.config import settings
 
 from app.db.repositories import (
@@ -19,6 +19,29 @@ from app.db.models.analysis import Analysis
 from app.db.models.comment import Comment
 
 logger = logging.getLogger(__name__)
+
+_sentiment_service = None
+
+
+def _get_sentiment_service():
+    global _sentiment_service
+    if _sentiment_service is not None:
+        return _sentiment_service
+
+    if settings.ONNX_MODEL_PATH:
+        _sentiment_service = OnnxSentimentService(
+            model_name_or_path=settings.MODEL_PATH,
+            onnx_model_path=settings.ONNX_MODEL_PATH,
+            batch_size=settings.SENTIMENT_BATCH_SIZE,
+        )
+        return _sentiment_service
+
+    _sentiment_service = SentimentService(
+        model_name=settings.MODEL_PATH,
+        device="cpu",
+        batch_size=settings.SENTIMENT_BATCH_SIZE,
+    )
+    return _sentiment_service
 
 
 class AnalysisService:
@@ -106,17 +129,19 @@ class AnalysisService:
         # 5️⃣ Preprocess + Sentiment
         # ======================
         preprocessing_service = PreprocessingService()
-        sentiment_service = SentimentService(
-            model_name=settings.MODEL_PATH,
-            device="cpu"
-        )
+        sentiment_service = _get_sentiment_service()
         comment_models = []
 
         try:
-            for idx, raw in enumerate(raw_comments):
+            clean_texts = [
+                preprocessing_service.clean_text(raw["text"])
+                for raw in raw_comments
+            ]
+
+            results = sentiment_service.analyze_batch(clean_texts)
+
+            for idx, (raw, result) in enumerate(zip(raw_comments, results)):
                 try:
-                    clean_text = preprocessing_service.clean_text(raw["text"])
-                    result = sentiment_service.analyze(clean_text)
                     sentiment = result["sentiment"]
 
                     comment_models.append(
@@ -136,7 +161,6 @@ class AnalysisService:
                     )
                 except Exception as e:
                     logger.error(f"Error analyzing comment {idx}: {str(e)}")
-                    # Skip this comment and continue
                     continue
         except Exception as e:
             logger.error(f"Sentiment analysis failed: {str(e)}")
