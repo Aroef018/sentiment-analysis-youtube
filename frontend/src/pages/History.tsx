@@ -92,7 +92,7 @@ const History: React.FC = () => {
       await api.delete(`/analysis/video/${deleteModal.videoId}`);
       // Remove from local state
       setHistory((prev) =>
-        prev.filter((item) => item.id !== deleteModal.videoId)
+        prev.filter((item) => item.id !== deleteModal.videoId),
       );
       // Remove from selected if it was selected
       setSelected((prev) => prev.filter((id) => id !== deleteModal.videoId));
@@ -188,7 +188,7 @@ const History: React.FC = () => {
         </nav>
         <button
           onClick={handleLogout}
-          className="hidden md:block w-full mt-8 text-red-600 hover:bg-red-50 px-4 py-3 rounded-lg font-medium transition"
+          className="w-full mt-8 text-red-600 hover:bg-red-50 px-4 py-3 rounded-lg font-medium transition"
         >
           Logout
         </button>
@@ -647,7 +647,7 @@ const History: React.FC = () => {
                           </span>
                         </div>
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               </div>

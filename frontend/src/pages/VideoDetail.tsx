@@ -139,7 +139,7 @@ const VideoDetail: React.FC = () => {
       setCommentsError(
         error?.response?.data?.detail ||
           error?.message ||
-          "Gagal memuat komentar"
+          "Gagal memuat komentar",
       );
     } finally {
       setCommentsLoading(false);
@@ -190,7 +190,7 @@ const VideoDetail: React.FC = () => {
         </nav>
         <button
           onClick={handleLogout}
-          className="hidden md:block w-full mt-8 text-red-600 hover:bg-red-50 px-4 py-3 rounded-lg font-medium transition"
+          className="w-full mt-8 text-red-600 hover:bg-red-50 px-4 py-3 rounded-lg font-medium transition"
         >
           Logout
         </button>
@@ -250,7 +250,7 @@ const VideoDetail: React.FC = () => {
                         Dianalisis pada:{" "}
                         {data.analysis.created_at
                           ? new Date(
-                              data.analysis.created_at
+                              data.analysis.created_at,
                             ).toLocaleDateString("id-ID", {
                               day: "numeric",
                               month: "long",
@@ -439,7 +439,7 @@ const VideoDetail: React.FC = () => {
                                 {c.published_at && (
                                   <span>
                                     {new Date(
-                                      c.published_at
+                                      c.published_at,
                                     ).toLocaleDateString("id-ID")}
                                   </span>
                                 )}

@@ -269,7 +269,7 @@ const Dashboard: React.FC = () => {
         </nav>
         <button
           onClick={handleLogout}
-          className="hidden md:block w-full mt-8 text-red-600 hover:bg-red-50 px-4 py-3 rounded-lg font-medium transition"
+          className="w-full mt-8 text-red-600 hover:bg-red-50 px-4 py-3 rounded-lg font-medium transition"
         >
           Logout
         </button>
