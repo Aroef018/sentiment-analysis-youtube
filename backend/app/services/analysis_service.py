@@ -112,6 +112,8 @@ class AnalysisService:
         )
 
         analysis = await AnalysisRepository.create(db, analysis)
+        
+        logger.info(f"Analysis {analysis.id} created for video {video_id}")
 
         # ======================
         # 4️⃣ Fetch Comments
@@ -131,39 +133,62 @@ class AnalysisService:
         preprocessing_service = PreprocessingService()
         sentiment_service = _get_sentiment_service()
         comment_models = []
+        
+        # Process in chunks to avoid memory overload
+        CHUNK_SIZE = 100  # Process 100 comments at a time
+        total_comments_count = len(raw_comments)
+        
+        logger.info(f"Starting sentiment analysis for {total_comments_count} comments in chunks of {CHUNK_SIZE}")
 
         try:
-            clean_texts = [
-                preprocessing_service.clean_text(raw["text"])
-                for raw in raw_comments
-            ]
+            for chunk_start in range(0, total_comments_count, CHUNK_SIZE):
+                chunk_end = min(chunk_start + CHUNK_SIZE, total_comments_count)
+                chunk = raw_comments[chunk_start:chunk_end]
+                
+                logger.info(f"Processing chunk {chunk_start}-{chunk_end}/{total_comments_count}")
+                
+                # Preprocess texts in this chunk
+                cleaned_texts = []
+                for raw in chunk:
+                    try:
+                        clean_text = preprocessing_service.clean_text(raw["text"])
+                        cleaned_texts.append(clean_text)
+                    except Exception as e:
+                        logger.error(f"Error preprocessing comment: {str(e)}")
+                        cleaned_texts.append(" ")  # Fallback to empty
+                
+                # Batch sentiment analysis for this chunk
+                batch_results = sentiment_service.analyze_batch(cleaned_texts)
+                
+                # Map results back to comments
+                for raw, sentiment_result in zip(chunk, batch_results):
+                    try:
+                        sentiment = sentiment_result["sentiment"]
 
-            results = sentiment_service.analyze_batch(clean_texts)
-
-            for idx, (raw, result) in enumerate(zip(raw_comments, results)):
-                try:
-                    sentiment = result["sentiment"]
-
-                    comment_models.append(
-                        Comment(
-                            id=raw["comment_id"],
-                            video_id=video.id,
-                            analysis_id=analysis.id,
-                            author=raw["author"],
-                            text=raw["text"],
-                            sentiment=sentiment,
-                            parent_id=raw.get("parent_id"),
-                            is_top_level=raw["is_top_level"],
-                            like_count=raw["like_count"],
-                            published_at=raw["published_at"],
-                            created_at=datetime.utcnow(),
+                        comment_models.append(
+                            Comment(
+                                id=raw["comment_id"],
+                                video_id=video.id,
+                                analysis_id=analysis.id,
+                                author=raw["author"],
+                                text=raw["text"],
+                                sentiment=sentiment,
+                                parent_id=raw.get("parent_id"),
+                                is_top_level=raw["is_top_level"],
+                                like_count=raw["like_count"],
+                                published_at=raw["published_at"],
+                                created_at=datetime.utcnow(),
+                            )
                         )
-                    )
-                except Exception as e:
-                    logger.error(f"Error analyzing comment {idx}: {str(e)}")
-                    continue
+                    except Exception as e:
+                        logger.error(f"Error mapping comment: {str(e)}")
+                        # Skip this comment and continue
+                        continue
+            
+            logger.info(f"Sentiment analysis completed for {len(comment_models)} comments")
+                    
         except Exception as e:
-            logger.error(f"Sentiment analysis failed: {str(e)}")
+            logger.error(f"Sentiment analysis failed: {str(e)}", exc_info=True)
             raise Exception("Sentiment analysis gagal. Coba lagi nanti.")
 
         # ======================
