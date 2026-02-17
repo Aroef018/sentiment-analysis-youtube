@@ -7,7 +7,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 // Create axios instance dengan default config
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 30 seconds timeout
+  timeout: 900000, // 30 seconds timeout
   headers: {
     "Content-Type": "application/json",
   },
@@ -29,7 +29,7 @@ api.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 /**
@@ -53,7 +53,7 @@ api.interceptors.response.use(
         errorDetail.toLowerCase().includes("invalid or expired")
       ) {
         console.warn(
-          "Token expired or invalid, clearing auth and redirecting to login"
+          "Token expired or invalid, clearing auth and redirecting to login",
         );
 
         // Clear auth data from localStorage
@@ -142,7 +142,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
