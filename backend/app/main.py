@@ -53,13 +53,16 @@ allowed_origins = [
     "http://127.0.0.1:3000",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://sentiment-analysis-youtube.vercel.app",
 ]
 
 # Add production frontend URL from env if set
 import os
 frontend_url = os.getenv("FRONTEND_URL")
-if frontend_url and frontend_url not in allowed_origins:
-    allowed_origins.append(frontend_url)
+if frontend_url:
+    frontend_url = frontend_url.strip()
+    if frontend_url and frontend_url not in allowed_origins:
+        allowed_origins.append(frontend_url)
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,6 +73,8 @@ app.add_middleware(
     max_age=600,  # Cache preflight requests for 10 minutes
     expose_headers=["Content-Type"],
 )
+
+logger.info(f"CORS allowed origins: {allowed_origins}")
 
 from app.api.analysis_debug import router as analysis_debug_router
 
