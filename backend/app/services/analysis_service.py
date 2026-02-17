@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 import logging
+import gc
 from threading import Lock
 
 from app.services.youtube_video_service import YouTubeVideoService
@@ -52,12 +53,18 @@ def _get_sentiment_service():
         logger.info("Initializing sentiment service...")
         
         if settings.ONNX_MODEL_PATH:
+            logger.info(
+                f"Using ONNX model at {settings.ONNX_MODEL_PATH} (base: {settings.MODEL_PATH})"
+            )
             _sentiment_service = OnnxSentimentService(
                 model_name_or_path=settings.MODEL_PATH,
                 onnx_model_path=settings.ONNX_MODEL_PATH,
                 batch_size=settings.SENTIMENT_BATCH_SIZE,
             )
         else:
+            logger.info(
+                f"Using PyTorch model at {settings.MODEL_PATH} (ONNX not configured)"
+            )
             _sentiment_service = SentimentService(
                 model_name=settings.MODEL_PATH,
                 device="cpu",
@@ -178,13 +185,15 @@ class AnalysisService:
         # ======================
         # 5️⃣ Preprocess + Sentiment
         # ======================
+        # 5️⃣ Preprocess + Sentiment + Save Incrementally
+        # ======================
         preprocessing_service = PreprocessingService()
         sentiment_service = _get_sentiment_service()
-        comment_models = []
         
-        # Process in chunks to avoid memory overload
+        # Process and save in chunks to avoid memory overload
         CHUNK_SIZE = 100  # Process 100 comments at a time
         total_comments_count = len(raw_comments)
+        all_sentiments = []  # Track for final statistics
         
         logger.info(f"Starting sentiment analysis for {total_comments_count} comments in chunks of {CHUNK_SIZE}")
 
@@ -208,12 +217,14 @@ class AnalysisService:
                 # Batch sentiment analysis for this chunk
                 batch_results = sentiment_service.analyze_batch(cleaned_texts)
                 
-                # Map results back to comments
+                # Create comment models for this chunk only
+                chunk_comment_models = []
                 for raw, sentiment_result in zip(chunk, batch_results):
                     try:
                         sentiment = sentiment_result["sentiment"]
+                        all_sentiments.append(sentiment)  # Track for statistics
 
-                        comment_models.append(
+                        chunk_comment_models.append(
                             Comment(
                                 id=raw["comment_id"],
                                 video_id=video.id,
@@ -232,41 +243,52 @@ class AnalysisService:
                         logger.error(f"Error mapping comment: {str(e)}")
                         # Skip this comment and continue
                         continue
+                
+                # Save this chunk to database immediately (incremental save)
+                try:
+                    await CommentRepository.bulk_create(db, chunk_comment_models)
+                    logger.info(f"Saved chunk {chunk_start}-{chunk_end} to database ({len(chunk_comment_models)} comments)")
+                except Exception as e:
+                    logger.error(f"Failed to save chunk {chunk_start}-{chunk_end}: {str(e)}", exc_info=True)
+                    raise Exception(f"Gagal menyimpan komentar chunk {chunk_start}-{chunk_end}. Coba lagi nanti.")
+                
+                # Clear chunk from memory to prevent accumulation
+                del chunk_comment_models
+                del cleaned_texts
+                del batch_results
+                
+                # Force garbage collection every 2 chunks to keep memory low
+                if (chunk_start // CHUNK_SIZE) % 2 == 0:
+                    gc.collect()
             
-            logger.info(f"Sentiment analysis completed for {len(comment_models)} comments")
+            total_saved = len(all_sentiments)
+            logger.info(f"Sentiment analysis and save completed for {total_saved} comments")
                     
         except Exception as e:
             logger.error(f"Sentiment analysis failed: {str(e)}", exc_info=True)
             raise Exception("Sentiment analysis gagal. Coba lagi nanti.")
 
         # ======================
-        # 6️⃣ Save Comments
+        # 6️⃣ Update video and analysis metadata
         # ======================
+        
+        # Update video's comment_count to reflect saved comments
         try:
-            await CommentRepository.bulk_create(db, comment_models)
-            logger.info(f"Successfully saved {len(comment_models)} comments to database")
-        except Exception as e:
-            logger.error(f"Failed to save comments to database: {str(e)}", exc_info=True)
-            raise Exception("Gagal menyimpan hasil analisis ke database. Coba lagi nanti.")
-
-        # update video's comment_count to reflect saved comments
-        try:
-            video.comment_count = len(comment_models)
+            video.comment_count = len(all_sentiments)
             await db.commit()
             await db.refresh(video)
-            logger.info(f"Updated video comment_count to {len(comment_models)}")
+            logger.info(f"Updated video comment_count to {len(all_sentiments)}")
         except Exception as e:
             logger.warning(f"Failed to update video comment_count: {str(e)}")
             # Non-critical, continue anyway
-            pass
 
         # ======================
         # 7️⃣ Update analysis counts
         # ======================
-        total_comments = len(comment_models)
-        positive_count = sum(1 for c in comment_models if c.sentiment == "positive")
-        negative_count = sum(1 for c in comment_models if c.sentiment == "negative")
-        neutral_count = sum(1 for c in comment_models if c.sentiment == "neutral")
+        total_comments = len(all_sentiments)
+        positive_count = sum(1 for s in all_sentiments if s == "positive")
+        negative_count = sum(1 for s in all_sentiments if s == "negative")
+        neutral_count = sum(1 for s in all_sentiments if s == "neutral")
 
         analysis.total_comments = total_comments
         analysis.positive_count = positive_count
