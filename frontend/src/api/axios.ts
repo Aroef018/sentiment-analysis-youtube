@@ -7,7 +7,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 // Create axios instance dengan default config
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 300000, // 300 seconds timeout for long-running analysis
+  timeout: 900000, // 900 seconds timeout for long-running analysis
   headers: {
     "Content-Type": "application/json",
   },

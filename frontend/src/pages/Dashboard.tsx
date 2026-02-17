@@ -66,6 +66,7 @@ type CommentsResponse = {
 const Dashboard: React.FC = () => {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
+  const [analysisSeconds, setAnalysisSeconds] = useState(0);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string>("");
   const navigate = useNavigate();
@@ -155,6 +156,28 @@ const Dashboard: React.FC = () => {
       console.warn("Rehydrate failed", err);
     }
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      setAnalysisSeconds(0);
+      return;
+    }
+
+    const start = Date.now();
+    setAnalysisSeconds(0);
+    const id = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      setAnalysisSeconds(elapsed);
+    }, 1000);
+
+    return () => window.clearInterval(id);
+  }, [loading]);
+
+  const formatElapsed = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -375,6 +398,12 @@ const Dashboard: React.FC = () => {
                       <span>{loading ? "Menganalisis..." : "Analisis"}</span>
                     </span>
                   </button>
+                  {loading && (
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+                      <Clock size={14} /> Waktu berjalan:{" "}
+                      {formatElapsed(analysisSeconds)}
+                    </div>
+                  )}
                 </form>
                 {error && (
                   <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
