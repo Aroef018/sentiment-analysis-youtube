@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 import logging
+from threading import Lock
 
 from app.services.youtube_video_service import YouTubeVideoService
 from app.services.preprocessing_service import PreprocessingService
@@ -21,27 +23,49 @@ from app.db.models.comment import Comment
 logger = logging.getLogger(__name__)
 
 _sentiment_service = None
+_service_lock = Lock()
+
+# Semaphore to limit concurrent analysis - initialized lazily
+_analysis_semaphore = None
+
+
+def _get_analysis_semaphore():
+    """Lazy initialization of analysis semaphore"""
+    global _analysis_semaphore
+    if _analysis_semaphore is None:
+        _analysis_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_ANALYSIS)
+    return _analysis_semaphore
 
 
 def _get_sentiment_service():
+    """Thread-safe singleton for sentiment service"""
     global _sentiment_service
+    
     if _sentiment_service is not None:
         return _sentiment_service
-
-    if settings.ONNX_MODEL_PATH:
-        _sentiment_service = OnnxSentimentService(
-            model_name_or_path=settings.MODEL_PATH,
-            onnx_model_path=settings.ONNX_MODEL_PATH,
-            batch_size=settings.SENTIMENT_BATCH_SIZE,
-        )
+    
+    with _service_lock:
+        # Double-check locking pattern
+        if _sentiment_service is not None:
+            return _sentiment_service
+        
+        logger.info("Initializing sentiment service...")
+        
+        if settings.ONNX_MODEL_PATH:
+            _sentiment_service = OnnxSentimentService(
+                model_name_or_path=settings.MODEL_PATH,
+                onnx_model_path=settings.ONNX_MODEL_PATH,
+                batch_size=settings.SENTIMENT_BATCH_SIZE,
+            )
+        else:
+            _sentiment_service = SentimentService(
+                model_name=settings.MODEL_PATH,
+                device="cpu",
+                batch_size=settings.SENTIMENT_BATCH_SIZE,
+            )
+        
+        logger.info("Sentiment service initialized successfully")
         return _sentiment_service
-
-    _sentiment_service = SentimentService(
-        model_name=settings.MODEL_PATH,
-        device="cpu",
-        batch_size=settings.SENTIMENT_BATCH_SIZE,
-    )
-    return _sentiment_service
 
 
 class AnalysisService:
@@ -59,7 +83,31 @@ class AnalysisService:
         4. Preprocess + sentiment
         5. Save to DB
         6. Return summary
+        
+        Protected by semaphore to limit concurrent analysis and prevent memory overload.
         """
+        
+        semaphore = _get_analysis_semaphore()
+        
+        # Try to acquire semaphore with timeout (5 minutes to wait in queue)
+        try:
+            async with asyncio.timeout(300):  # 5 minutes timeout to acquire semaphore
+                async with semaphore:
+                    logger.info(f"Analysis started for user {user_id} (semaphore acquired, limit={settings.MAX_CONCURRENT_ANALYSIS})")
+                    return await AnalysisService._perform_analysis(db, youtube_url, user_id)
+        except asyncio.TimeoutError:
+            logger.warning(f"Analysis timeout for user {user_id} - server too busy, waited 5 minutes")
+            raise Exception(
+                "Server sedang memproses analisis lain. Silakan coba lagi dalam beberapa saat."
+            )
+    
+    @staticmethod
+    async def _perform_analysis(
+        db: AsyncSession,
+        youtube_url: str,
+        user_id: uuid.UUID
+    ) -> dict:
+        """Internal method that performs the actual analysis"""
 
         # ======================
         # 1️⃣ Extract Video ID
@@ -194,14 +242,22 @@ class AnalysisService:
         # ======================
         # 6️⃣ Save Comments
         # ======================
-        await CommentRepository.bulk_create(db, comment_models)
+        try:
+            await CommentRepository.bulk_create(db, comment_models)
+            logger.info(f"Successfully saved {len(comment_models)} comments to database")
+        except Exception as e:
+            logger.error(f"Failed to save comments to database: {str(e)}", exc_info=True)
+            raise Exception("Gagal menyimpan hasil analisis ke database. Coba lagi nanti.")
 
         # update video's comment_count to reflect saved comments
         try:
             video.comment_count = len(comment_models)
             await db.commit()
             await db.refresh(video)
-        except Exception:
+            logger.info(f"Updated video comment_count to {len(comment_models)}")
+        except Exception as e:
+            logger.warning(f"Failed to update video comment_count: {str(e)}")
+            # Non-critical, continue anyway
             pass
 
         # ======================
@@ -218,8 +274,14 @@ class AnalysisService:
         analysis.neutral_count = neutral_count
 
         # persist changes
-        await db.commit()
-        await db.refresh(analysis)
+        try:
+            await db.commit()
+            await db.refresh(analysis)
+            logger.info(f"Updated analysis counts: pos={positive_count}, neu={neutral_count}, neg={negative_count}")
+        except Exception as e:
+            logger.error(f"Failed to update analysis counts: {str(e)}", exc_info=True)
+            await db.rollback()
+            raise Exception("Gagal menyimpan statistik analisis. Coba lagi nanti.")
 
         # ======================
         # 8️⃣ Return Summary
@@ -241,5 +303,7 @@ class AnalysisService:
                 "neutral": neutral_count,
             },
         }
+        
+        logger.info(f"Analysis completed successfully for user {user_id}, video {video_id}, {total_comments} comments analyzed")
 
         return summary

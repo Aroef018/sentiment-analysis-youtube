@@ -81,6 +81,16 @@ app.include_router(analysis_debug_router)
 @app.on_event("startup")
 async def startup_event():
     logger.info("Application startup", extra={"event": "startup"})
+    
+    # Warm up database connection to prevent Neon cold start
+    try:
+        from app.db.session import engine
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        logger.info("Database connection warmed up successfully")
+    except Exception as e:
+        logger.warning(f"Failed to warm up database connection: {str(e)}")
 
 
 @app.on_event("shutdown")
@@ -90,7 +100,44 @@ async def shutdown_event():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "ok"}
+    """Health check endpoint with concurrent analysis status and DB health"""
+    from app.services.analysis_service import _get_analysis_semaphore
+    from app.db.session import engine
+    from sqlalchemy import text
+    
+    semaphore = _get_analysis_semaphore()
+    available_slots = semaphore._value
+    max_concurrent = settings.MAX_CONCURRENT_ANALYSIS
+    active_analysis = max_concurrent - available_slots
+    
+    # Check DB connection pool status
+    pool = engine.pool
+    pool_status = {
+        "size": pool.size(),
+        "checked_in": pool.checkedin(),
+        "checked_out": pool.checkedout(),
+        "overflow": pool.overflow(),
+    }
+    
+    # Try to ping database
+    db_healthy = True
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        db_healthy = False
+    
+    return {
+        "status": "ok" if db_healthy else "degraded",
+        "database": {
+            "healthy": db_healthy,
+            "pool": pool_status,
+        },
+        "concurrent_analysis": {
+            "active": active_analysis,
+            "max": max_concurrent,
+            "available": available_slots
+        }
+    }
 
 

@@ -2,7 +2,12 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+import asyncio
+import logging
 from app.db.models.comment import Comment
+
+logger = logging.getLogger(__name__)
 
 
 class CommentRepository:
@@ -12,30 +17,60 @@ class CommentRepository:
         db: AsyncSession,
         comments: List[Comment]
     ) -> None:
-        # Upsert: do nothing on conflict of primary key 'id'
+        """
+        Bulk insert comments in chunks to avoid DB connection timeout.
+        Inserts 100 comments per batch with commit.
+        Includes retry logic for transient errors.
+        """
         if not comments:
             return
+        
+        CHUNK_SIZE = 100  # Insert 100 comments at a time
+        MAX_RETRIES = 3
+        total = len(comments)
+        
+        logger.info(f"Starting bulk insert of {total} comments in chunks of {CHUNK_SIZE}")
+        
+        for i in range(0, total, CHUNK_SIZE):
+            chunk = comments[i:i + CHUNK_SIZE]
+            
+            rows = [
+                {
+                    "id": c.id,
+                    "video_id": c.video_id,
+                    "analysis_id": c.analysis_id,
+                    "author": c.author,
+                    "text": c.text,
+                    "sentiment": c.sentiment,
+                    "parent_id": c.parent_id,
+                    "is_top_level": c.is_top_level,
+                    "like_count": c.like_count,
+                    "published_at": c.published_at,
+                    "created_at": c.created_at,
+                }
+                for c in chunk
+            ]
 
-        rows = [
-            {
-                "id": c.id,
-                "video_id": c.video_id,
-                "analysis_id": c.analysis_id,
-                "author": c.author,
-                "text": c.text,
-                "sentiment": c.sentiment,
-                "parent_id": c.parent_id,
-                "is_top_level": c.is_top_level,
-                "like_count": c.like_count,
-                "published_at": c.published_at,
-                "created_at": c.created_at,
-            }
-            for c in comments
-        ]
-
-        stmt = insert(Comment).values(rows).on_conflict_do_nothing(index_elements=["id"])
-        await db.execute(stmt)
-        await db.commit()
+            # Retry logic for transient DB errors
+            for attempt in range(MAX_RETRIES):
+                try:
+                    stmt = insert(Comment).values(rows).on_conflict_do_nothing(index_elements=["id"])
+                    await db.execute(stmt)
+                    await db.commit()
+                    logger.info(f"Inserted comments {i}-{i+len(chunk)}/{total}")
+                    break  # Success, exit retry loop
+                    
+                except SQLAlchemyError as e:
+                    if attempt < MAX_RETRIES - 1:
+                        logger.warning(f"DB error on chunk {i}, retry {attempt + 1}/{MAX_RETRIES}: {str(e)}")
+                        await db.rollback()
+                        await asyncio.sleep(1)  # Wait before retry
+                    else:
+                        logger.error(f"DB error on chunk {i} after {MAX_RETRIES} retries: {str(e)}")
+                        await db.rollback()
+                        raise
+        
+        logger.info(f"Bulk insert completed: {total} comments")
 
     @staticmethod
     async def get_by_analysis_id_paginated(
