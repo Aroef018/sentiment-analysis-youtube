@@ -16,11 +16,12 @@ engine = create_async_engine(
     max_overflow=5,  # Reduced from 10 - max 8 total connections per worker
     pool_timeout=30,  # Wait max 30 seconds for connection from pool
     connect_args={
-        "statement_timeout": 300000,  # 5 minutes (reduced from 10 for better responsiveness)
-        "command_timeout": 300,  # 5 minutes
+        "timeout": 30,  # Connection timeout (asyncpg syntax)
+        "command_timeout": 300,  # Command timeout in seconds (asyncpg syntax)
         "server_settings": {
             "application_name": "sentiment-analysis",
             "jit": "off",  # Disable JIT for faster cold starts on Neon
+            "statement_timeout": "300000",  # 5 minutes in milliseconds (PostgreSQL setting)
         },
     }
 )

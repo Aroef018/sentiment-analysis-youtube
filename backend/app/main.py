@@ -87,9 +87,11 @@ async def startup_event():
         from app.db.session import engine
         from sqlalchemy import text
         async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+            result = await conn.execute(text("SELECT 1 as health_check"))
+            await result.fetchone()
         logger.info("Database connection warmed up successfully")
     except Exception as e:
+        # Non-critical: app can still run without warmup
         logger.warning(f"Failed to warm up database connection: {str(e)}")
 
 
