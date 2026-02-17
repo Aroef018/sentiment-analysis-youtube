@@ -427,8 +427,20 @@ const VideoDetail: React.FC = () => {
                                 <span className="font-semibold text-sm">
                                   @{c.author}
                                 </span>
-                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                  {c.sentiment}
+                                <span
+                                  className={`text-xs px-2 py-1 rounded font-medium ${
+                                    c.sentiment === "positive"
+                                      ? "bg-green-100 text-green-800"
+                                      : c.sentiment === "neutral"
+                                        ? "bg-yellow-100 text-yellow-800"
+                                        : "bg-red-100 text-red-800"
+                                  }`}
+                                >
+                                  {c.sentiment === "positive"
+                                    ? "Positif"
+                                    : c.sentiment === "neutral"
+                                      ? "Netral"
+                                      : "Negatif"}
                                 </span>
                               </div>
                               <p className="text-sm text-gray-700 mb-2">
