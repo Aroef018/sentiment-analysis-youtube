@@ -84,11 +84,13 @@ async def startup_event():
     
     # Warm up database connection to prevent Neon cold start
     try:
-        from app.db.session import engine
+        from app.db.session import AsyncSessionLocal
         from sqlalchemy import text
-        async with engine.connect() as conn:
-            result = await conn.execute(text("SELECT 1 as health_check"))
-            await result.fetchone()
+        
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(text("SELECT 1"))
+            result.scalar()  # Force execution
+        
         logger.info("Database connection warmed up successfully")
     except Exception as e:
         # Non-critical: app can still run without warmup
