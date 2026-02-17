@@ -78,6 +78,57 @@ const Dashboard: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [commentsError, setCommentsError] = useState<string | null>(null);
 
+  const normalizeAnalyzeError = (detail: unknown) => {
+    if (!detail) return "Analisis gagal. Coba lagi nanti.";
+    if (Array.isArray(detail)) {
+      const first = detail[0] as { msg?: string } | undefined;
+      if (first?.msg) return normalizeAnalyzeError(first.msg);
+    }
+    const message = String(detail);
+    const lower = message.toLowerCase();
+    const isUrlError =
+      (lower.includes("url") || lower.includes("youtube")) &&
+      (lower.includes("invalid") ||
+        lower.includes("not a valid") ||
+        lower.includes("not valid") ||
+        lower.includes("missing scheme") ||
+        lower.includes("url scheme") ||
+        lower.includes("value is not a valid"));
+    if (isUrlError) {
+      return "URL YouTube tidak valid. Pastikan link lengkap dengan https://";
+    }
+    if (lower.includes("video") && lower.includes("not found")) {
+      return "Video tidak ditemukan. Pastikan URL benar dan video tersedia.";
+    }
+    return "Analisis gagal. Coba lagi nanti.";
+  };
+
+  const normalizeCommentsError = (detail: unknown) => {
+    if (!detail) return "Gagal memuat komentar. Coba lagi nanti.";
+    if (Array.isArray(detail)) {
+      const first = detail[0] as { msg?: string } | undefined;
+      if (first?.msg) return normalizeCommentsError(first.msg);
+    }
+    const message = String(detail);
+    const lower = message.toLowerCase();
+    if (lower.includes("token has expired")) {
+      return "Sesi Anda berakhir. Silakan login ulang.";
+    }
+    if (lower.includes("invalid token")) {
+      return "Sesi Anda tidak valid. Silakan login ulang.";
+    }
+    if (lower.includes("not authenticated") || lower.includes("unauthorized")) {
+      return "Anda belum login. Silakan masuk kembali.";
+    }
+    if (lower.includes("not found")) {
+      return "Komentar tidak ditemukan.";
+    }
+    if (lower.includes("network error") || lower.includes("failed to fetch")) {
+      return "Gagal terhubung ke server. Periksa koneksi internet Anda.";
+    }
+    return "Gagal memuat komentar. Coba lagi nanti.";
+  };
+
   // Check authentication on mount
   useEffect(() => {
     const token =
@@ -176,8 +227,13 @@ const Dashboard: React.FC = () => {
       }
       // persist last error is not necessary
     } catch (err) {
-      const error = err as { response?: { data?: { detail?: string } } };
-      const msg = error?.response?.data?.detail || "Analisis gagal";
+      const error = err as {
+        response?: { data?: { detail?: unknown } };
+        message?: string;
+      };
+      const msg = normalizeAnalyzeError(
+        error?.response?.data?.detail ?? error?.message,
+      );
       setError(msg);
       setResult(null);
     } finally {
@@ -231,9 +287,7 @@ const Dashboard: React.FC = () => {
       };
       console.error("Error fetching comments:", error);
       setCommentsError(
-        error?.response?.data?.detail ||
-          error?.message ||
-          "Gagal memuat komentar",
+        normalizeCommentsError(error?.response?.data?.detail ?? error?.message),
       );
     } finally {
       setCommentsLoading(false);

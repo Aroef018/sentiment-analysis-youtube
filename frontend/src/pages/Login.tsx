@@ -13,6 +13,58 @@ const Login: React.FC = () => {
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const [googleReady, setGoogleReady] = useState<boolean>(false);
 
+  const normalizeLoginError = (detail: unknown) => {
+    if (!detail) return "Login gagal. Coba lagi nanti.";
+    if (Array.isArray(detail)) {
+      const first = detail[0] as { msg?: string } | undefined;
+      if (first?.msg) return normalizeLoginError(first.msg);
+    }
+    const message = String(detail);
+    const lower = message.toLowerCase();
+    if (lower.includes("invalid credentials")) {
+      return "Email atau password salah";
+    }
+    if (
+      lower.includes("not a valid email") ||
+      lower.includes("value is not a valid email")
+    ) {
+      return "Format email tidak valid";
+    }
+    if (lower.includes("login failed")) {
+      return "Login gagal. Coba lagi nanti.";
+    }
+    if (lower.includes("database error")) {
+      return "Terjadi kesalahan database. Coba lagi nanti.";
+    }
+    return "Login gagal. Coba lagi nanti.";
+  };
+
+  const normalizeGoogleLoginError = (detail: unknown) => {
+    if (!detail) return "Login Google gagal. Coba lagi nanti.";
+    if (Array.isArray(detail)) {
+      const first = detail[0] as { msg?: string } | undefined;
+      if (first?.msg) return normalizeGoogleLoginError(first.msg);
+    }
+    const message = String(detail);
+    const lower = message.toLowerCase();
+    if (lower.includes("invalid google token")) {
+      return "Login Google gagal. Token tidak valid.";
+    }
+    if (lower.includes("authentication service temporarily unavailable")) {
+      return "Layanan autentikasi Google sedang bermasalah. Coba lagi nanti.";
+    }
+    if (lower.includes("email not found")) {
+      return "Login Google gagal. Email tidak ditemukan.";
+    }
+    if (lower.includes("provider id not found")) {
+      return "Login Google gagal. ID provider tidak ditemukan.";
+    }
+    if (lower.includes("database error")) {
+      return "Terjadi kesalahan database. Coba lagi nanti.";
+    }
+    return "Login Google gagal. Coba lagi nanti.";
+  };
+
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
     let tries = 0;
@@ -26,16 +78,25 @@ const Login: React.FC = () => {
           client_id: clientId,
           callback: async (response: any) => {
             const idToken = response?.credential;
-            if (!idToken) return;
+            if (!idToken) {
+              setError("Login Google gagal. Token tidak valid.");
+              return;
+            }
             try {
+              setError("");
               const res = await googleLoginApi(idToken);
               const data = res.data;
               if (data?.access_token) {
                 localStorage.setItem("token", data.access_token);
                 navigate("/");
+              } else {
+                setError("Login Google gagal. Token tidak ditemukan.");
               }
             } catch (err) {
-              console.error("Google login gagal", err);
+              const msg = normalizeGoogleLoginError(
+                (err as any)?.response?.data?.detail ?? (err as any)?.message,
+              );
+              setError(msg);
             }
           },
         });
@@ -80,10 +141,12 @@ const Login: React.FC = () => {
         } catch {}
         navigate("/");
       } else {
-        setError("Login gagal: token tidak ditemukan");
+        setError("Login gagal. Token tidak ditemukan.");
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || "Login gagal";
+      const msg = normalizeLoginError(
+        err?.response?.data?.detail ?? err?.message,
+      );
       setError(msg);
     } finally {
       setLoading(false);

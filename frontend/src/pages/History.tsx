@@ -251,6 +251,17 @@ const History: React.FC = () => {
                     </td>
                   </tr>
                 )}
+                {!loading && history.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="p-6 text-center text-gray-500 text-sm"
+                    >
+                      Belum ada riwayat analisis. Mulai analisis video untuk
+                      melihat daftar di sini.
+                    </td>
+                  </tr>
+                )}
                 {history.map((item) => (
                   <tr
                     key={item.id}
@@ -337,6 +348,12 @@ const History: React.FC = () => {
             {loading && history.length === 0 && (
               <div className="bg-white p-4 rounded-2xl border border-gray-100 text-center text-gray-500 text-sm">
                 Memuat riwayat...
+              </div>
+            )}
+            {!loading && history.length === 0 && (
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 text-center text-gray-500 text-sm">
+                Belum ada riwayat analisis. Mulai analisis video untuk melihat
+                daftar di sini.
               </div>
             )}
             {history.map((item) => (

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { registerApi } from "../api/auth.api";
+import { meApi, registerApi } from "../api/auth.api";
 import { Mail, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
 
 const Register: React.FC = () => {
@@ -14,6 +14,59 @@ const Register: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const navigate = useNavigate();
+
+  const hasPassword = formData.password.length > 0;
+  const passwordChecks = {
+    length: formData.password.length >= 8,
+    upper: /[A-Z]/.test(formData.password),
+    lower: /[a-z]/.test(formData.password),
+    digit: /\d/.test(formData.password),
+  };
+  const ruleTextClass = (ok: boolean) =>
+    ok ? "text-green-700" : hasPassword ? "text-red-600" : "text-gray-500";
+  const ruleDotClass = (ok: boolean) =>
+    ok ? "bg-green-600" : hasPassword ? "bg-red-500" : "bg-gray-300";
+
+  const normalizeRegisterError = (detail: unknown) => {
+    if (!detail) return "Registrasi gagal. Coba lagi nanti.";
+    if (Array.isArray(detail)) {
+      const first = detail[0] as { msg?: string } | undefined;
+      if (first?.msg) return normalizeRegisterError(first.msg);
+    }
+    const message = String(detail);
+    const lower = message.toLowerCase();
+    if (lower.includes("email already registered")) {
+      return "Email sudah terdaftar";
+    }
+    if (
+      lower.includes("not a valid email") ||
+      lower.includes("value is not a valid email")
+    ) {
+      return "Format email tidak valid";
+    }
+    if (lower.includes("password must be at least 8")) {
+      return "Password minimal 8 karakter";
+    }
+    if (lower.includes("uppercase letter")) {
+      return "Password harus mengandung minimal 1 huruf besar";
+    }
+    if (lower.includes("lowercase letter")) {
+      return "Password harus mengandung minimal 1 huruf kecil";
+    }
+    if (lower.includes("digit")) {
+      return "Password harus mengandung minimal 1 angka";
+    }
+    if (lower.includes("full name") && lower.includes("invalid")) {
+      return "Nama tidak valid";
+    }
+    if (lower.includes("database error")) {
+      return "Terjadi kesalahan database. Coba lagi nanti.";
+    }
+    if (lower.includes("registration failed")) {
+      return "Registrasi gagal. Coba lagi nanti.";
+    }
+    return "Registrasi gagal. Coba lagi nanti.";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,19 +110,29 @@ const Register: React.FC = () => {
         formData.password,
       );
 
-      // Simpan token ke localStorage
-      if (response.data.access_token) {
-        localStorage.setItem("access_token", response.data.access_token);
-        localStorage.setItem(
-          "token_type",
-          response.data.token_type || "bearer",
-        );
+      const token = response?.data?.access_token;
+      if (!token) {
+        setError("Registrasi berhasil, tetapi token tidak ditemukan.");
+        return;
       }
 
-      // Redirect ke dashboard
+      localStorage.setItem("token", token);
+
+      try {
+        await meApi();
+      } catch (verifyErr) {
+        localStorage.removeItem("token");
+        setError(
+          "Registrasi berhasil, tetapi sesi tidak valid. Silakan login ulang.",
+        );
+        return;
+      }
+
       navigate("/");
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || "Registrasi gagal";
+      const msg = normalizeRegisterError(
+        err?.response?.data?.detail ?? err?.message,
+      );
       setError(msg);
     } finally {
       setLoading(false);
@@ -221,6 +284,62 @@ const Register: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs">
+              <p className="font-semibold mb-2 text-blue-700">
+                Syarat password:
+              </p>
+              <ul className="space-y-1">
+                <li
+                  className={`flex items-center gap-2 ${ruleTextClass(
+                    passwordChecks.length,
+                  )}`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${ruleDotClass(
+                      passwordChecks.length,
+                    )}`}
+                  />
+                  Minimal 8 karakter
+                </li>
+                <li
+                  className={`flex items-center gap-2 ${ruleTextClass(
+                    passwordChecks.upper,
+                  )}`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${ruleDotClass(
+                      passwordChecks.upper,
+                    )}`}
+                  />
+                  Minimal 1 huruf besar
+                </li>
+                <li
+                  className={`flex items-center gap-2 ${ruleTextClass(
+                    passwordChecks.lower,
+                  )}`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${ruleDotClass(
+                      passwordChecks.lower,
+                    )}`}
+                  />
+                  Minimal 1 huruf kecil
+                </li>
+                <li
+                  className={`flex items-center gap-2 ${ruleTextClass(
+                    passwordChecks.digit,
+                  )}`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${ruleDotClass(
+                      passwordChecks.digit,
+                    )}`}
+                  />
+                  Minimal 1 angka
+                </li>
+              </ul>
             </div>
 
             <button
