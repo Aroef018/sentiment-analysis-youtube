@@ -1,21 +1,35 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+
+import logging
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt, JWTError, ExpiredSignatureError
-import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
-import logging
-
 from app.schemas import AnalysisRequest, AnalysisResponse, HistoryResponse, HistoryItem
 from app.db.session import get_async_db
 from app.services.analysis_service import AnalysisService
+from app.services.analysis_task_registry import running_analysis_tasks
 from app.core.config import settings
 from app.core.security import ALGORITHM
 from app.core.rate_limiter import limiter
 
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
 auth_scheme = HTTPBearer(auto_error=True)
+
+# Endpoint untuk membatalkan analisis berjalan user
+@router.post("/cancel", status_code=status.HTTP_200_OK)
+async def cancel_analysis(
+    credentials: HTTPAuthorizationCredentials = Depends(auth_scheme),
+):
+    """Cancel running analysis for current user (if any)"""
+    user_id = str(get_user_id_from_token(credentials))
+    task = running_analysis_tasks.get(user_id)
+    if task is None or task.done():
+        return {"message": "Tidak ada analisis yang sedang berjalan."}
+    task.cancel()
+    return {"message": "Analisis berhasil dibatalkan."}
 
 
 def decode_token_safely(token: str) -> dict:

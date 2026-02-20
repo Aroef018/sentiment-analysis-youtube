@@ -1,25 +1,27 @@
+
+import asyncio
+import gc
+import logging
 import uuid
 from datetime import datetime
-from sqlalchemy.ext.asyncio import AsyncSession
-import asyncio
-import logging
-import gc
 from threading import Lock
 
-from app.services.youtube_video_service import YouTubeVideoService
-from app.services.preprocessing_service import PreprocessingService
-from app.services.sentiment_service import SentimentService, OnnxSentimentService
-from app.core.config import settings
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
+from app.core.security import ALGORITHM
+from app.db.models.analysis import Analysis
+from app.db.models.comment import Comment
+from app.db.models.video import Video
 from app.db.repositories import (
     VideoRepository,
     AnalysisRepository,
     CommentRepository,
 )
-
-from app.db.models.video import Video
-from app.db.models.analysis import Analysis
-from app.db.models.comment import Comment
+from app.services.preprocessing_service import PreprocessingService
+from app.services.sentiment_service import SentimentService, OnnxSentimentService
+from app.services.youtube_video_service import YouTubeVideoService
+from app.services.analysis_task_registry import running_analysis_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -93,20 +95,29 @@ class AnalysisService:
         
         Protected by semaphore to limit concurrent analysis and prevent memory overload.
         """
-        
         semaphore = _get_analysis_semaphore()
-        
-        # Try to acquire semaphore with timeout (5 minutes to wait in queue)
+        user_id_str = str(user_id)
+        current_task = asyncio.current_task()
+        running_analysis_tasks[user_id_str] = current_task
         try:
+            # Try to acquire semaphore with timeout (5 minutes to wait in queue)
             async with asyncio.timeout(300):  # 5 minutes timeout to acquire semaphore
                 async with semaphore:
                     logger.info(f"Analysis started for user {user_id} (semaphore acquired, limit={settings.MAX_CONCURRENT_ANALYSIS})")
-                    return await AnalysisService._perform_analysis(db, youtube_url, user_id)
+                    try:
+                        return await AnalysisService._perform_analysis(db, youtube_url, user_id)
+                    except asyncio.CancelledError:
+                        logger.warning(f"Analysis cancelled for user {user_id}")
+                        raise Exception("Analisis dibatalkan oleh pengguna.")
         except asyncio.TimeoutError:
             logger.warning(f"Analysis timeout for user {user_id} - server too busy, waited 5 minutes")
             raise Exception(
                 "Server sedang memproses analisis lain. Silakan coba lagi dalam beberapa saat."
             )
+        finally:
+            # Hapus task dari registry jika sudah selesai/cancelled
+            if running_analysis_tasks.get(user_id_str) is current_task:
+                del running_analysis_tasks[user_id_str]
     
     @staticmethod
     async def _perform_analysis(
