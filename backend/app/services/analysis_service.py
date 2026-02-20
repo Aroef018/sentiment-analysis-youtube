@@ -108,7 +108,7 @@ class AnalysisService:
                         return await AnalysisService._perform_analysis(db, youtube_url, user_id)
                     except asyncio.CancelledError:
                         logger.warning(f"Analysis cancelled for user {user_id}")
-                        raise Exception("Analisis dibatalkan oleh pengguna.")
+                        raise HTTPException(status_code=409, detail="Analisis dibatalkan oleh pengguna.")
         except asyncio.TimeoutError:
             logger.warning(f"Analysis timeout for user {user_id} - server too busy, waited 5 minutes")
             raise Exception(
