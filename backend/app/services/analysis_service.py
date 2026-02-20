@@ -207,14 +207,17 @@ class AnalysisService:
 
         try:
             for chunk_start in range(0, total_comments_count, CHUNK_SIZE):
+                await asyncio.sleep(0)  # Responsif terhadap cancel di setiap chunk
                 chunk_end = min(chunk_start + CHUNK_SIZE, total_comments_count)
                 chunk = raw_comments[chunk_start:chunk_end]
-                
+
                 logger.info(f"Processing chunk {chunk_start}-{chunk_end}/{total_comments_count}")
-                
+
                 # Preprocess texts in this chunk
                 cleaned_texts = []
-                for raw in chunk:
+                for idx, raw in enumerate(chunk):
+                    if idx % 20 == 0:
+                        await asyncio.sleep(0)  # Responsif terhadap cancel di dalam chunk besar
                     try:
                         clean_text = preprocessing_service.clean_text(raw["text"])
                         cleaned_texts.append(clean_text)
