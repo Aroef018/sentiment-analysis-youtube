@@ -245,6 +245,10 @@ class YouTubeCommentService:
             logger.info(f"Successfully fetched total {len(all_comments)} comments for video {video_id}")
             return all_comments
 
+        except asyncio.CancelledError:
+            logger.info("Komentar task dibatalkan oleh pengguna.")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=409, detail="Komentar dibatalkan oleh pengguna.")
         except Exception as e:
             if isinstance(e, Exception) and "Video ini" in str(e):
                 raise  # Re-raise our custom messages

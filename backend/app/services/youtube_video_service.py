@@ -79,9 +79,10 @@ class YouTubeVideoService:
         """
         Fetch video metadata from YouTube API with error handling
         """
+        import asyncio
         try:
             video_id = self.extract_video_id(url)
-            
+
             response = self.youtube.videos().list(
                 part="snippet,statistics",
                 id=video_id,
@@ -122,12 +123,12 @@ class YouTubeVideoService:
                 view_count = int(stats.get("viewCount", 0))
             except (ValueError, TypeError):
                 view_count = 0
-            
+
             try:
                 like_count = int(stats.get("likeCount", 0))
             except (ValueError, TypeError):
                 like_count = 0
-            
+
             try:
                 comment_count = int(stats.get("commentCount", 0))
             except (ValueError, TypeError):
@@ -143,10 +144,14 @@ class YouTubeVideoService:
                 "like_count": like_count,
                 "comment_count": comment_count,
             }
-            
+
             logger.info(f"Successfully fetched metadata for video: {video_id}")
             return result
-            
+
+        except asyncio.CancelledError:
+            logger.info("Video detail task dibatalkan oleh pengguna.")
+            from fastapi import HTTPException
+            raise HTTPException(status_code=409, detail="Video detail dibatalkan oleh pengguna.")
         except ValueError:
             raise
         except HttpError as e:

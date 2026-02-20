@@ -1,5 +1,6 @@
 
 import asyncio
+from fastapi import HTTPException
 import gc
 import logging
 import uuid
@@ -9,7 +10,6 @@ from threading import Lock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import ALGORITHM
 from app.db.models.analysis import Analysis
 from app.db.models.comment import Comment
 from app.db.models.video import Video
@@ -137,10 +137,8 @@ class AnalysisService:
         # 2️⃣ Video (get or create)
         # ======================
         video = await VideoRepository.get_by_youtube_id(db, video_id)
-
-        if not video:
+        if video is None:
             metadata = youtube_service.fetch_video_detail(youtube_url)
-
             video = Video(
                 id=uuid.uuid4(),
                 youtube_video_id=video_id,
@@ -152,7 +150,6 @@ class AnalysisService:
                 comment_count=metadata.get("comment_count"),
                 created_at=datetime.utcnow(),
             )
-
             video = await VideoRepository.create(db, video)
         else:
             # update existing video metadata (thumbnail, like/comment counts)
