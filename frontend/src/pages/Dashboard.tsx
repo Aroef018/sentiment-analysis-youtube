@@ -363,7 +363,7 @@ const Dashboard: React.FC = () => {
                 </h2>
                 <p className="text-gray-600 mb-8">
                   Pahami sentimen komentar dengan cepat dan akurat
-                </p>
+                </p>{" "}
               </div>
 
               <div className="max-w-xl mx-auto mb-12">
@@ -460,6 +460,16 @@ const Dashboard: React.FC = () => {
                       </p>
                     </div>
                   </div>
+                </div>
+              </div>
+              {/* Catatan sistem di bawah info cards, sesuai area yang dikotak biru */}
+              <div className="mt-6 flex justify-center">
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-md px-4 py-3 text-xs shadow w-full max-w-2xl text-center mx-auto">
+                  <b>Catatan:</b> Sistem ini dioptimalkan untuk komentar YouTube
+                  berbahasa Indonesia. Waktu analisis bergantung pada jumlah
+                  komentar. Pada video dengan komentar sangat banyak, hasil
+                  analisis mungkin memerlukan waktu lebih lama atau gagal
+                  ditampilkan.
                 </div>
               </div>
             </div>

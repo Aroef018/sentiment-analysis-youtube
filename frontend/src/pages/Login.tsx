@@ -160,11 +160,11 @@ const Login: React.FC = () => {
         <div className="hidden md:flex bg-blue-600 p-12 flex-col justify-between text-white relative overflow-hidden">
           <div className="relative z-10">
             <h1 className="text-4xl font-bold mb-4 leading-tight">
-              Analisis Sentimen Jadi Lebih Mudah.
+              Analisis Sentimen Jadi Lebih Mudah
             </h1>
             <p className="text-blue-100 text-lg">
-              Pantau opini publik dari komentar YouTube dalam hitungan detik
-              dengan AI.
+              Pantau opini publik dari komentar YouTube dengan AI dalam hitungan
+              detik.
             </p>
           </div>
 
@@ -235,12 +235,6 @@ const Login: React.FC = () => {
                 <label className="text-sm font-semibold text-gray-700">
                   Password
                 </label>
-                <a
-                  href="#"
-                  className="text-xs font-bold text-blue-600 hover:text-blue-800"
-                >
-                  Lupa Password?
-                </a>
               </div>
               <div className="relative group">
                 <Lock

@@ -5,6 +5,8 @@ import { Mail, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
 
 const Register: React.FC = () => {
   const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState<boolean>(false);
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -146,7 +148,7 @@ const Register: React.FC = () => {
         <div className="hidden md:flex bg-blue-600 p-12 flex-col justify-between text-white relative overflow-hidden">
           <div className="relative z-10">
             <h1 className="text-4xl font-bold mb-4 leading-tight">
-              Mulai Perjalanan Analisis Anda.
+              Mulai Perjalanan Analisis Anda
             </h1>
             <p className="text-blue-100 text-lg">
               Dapatkan wawasan mendalam dari ribuan komentar YouTube secara
@@ -246,12 +248,19 @@ const Register: React.FC = () => {
                   <input
                     type={showPassword ? "text" : "password"}
                     required
-                    className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-600 outline-none transition-all"
+                    className="w-full pl-11 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-600 outline-none transition-all"
                     placeholder="••••••••"
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
                     }
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </div>
               <div className="space-y-1">
@@ -264,7 +273,7 @@ const Register: React.FC = () => {
                     size={18}
                   />
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type={showConfirmPassword ? "text" : "password"}
                     required
                     className="w-full pl-11 pr-10 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-600 outline-none transition-all"
                     placeholder="••••••••"
@@ -277,10 +286,14 @@ const Register: React.FC = () => {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowPassword(!showPassword)}
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showConfirmPassword ? (
+                      <EyeOff size={18} />
+                    ) : (
+                      <Eye size={18} />
+                    )}
                   </button>
                 </div>
               </div>
